@@ -1,0 +1,81 @@
+    Java应用启动过程是首先BootstarpClassloader加载rt.jar包里面的sun.misc.Launcher类，
+而该类内部使用BootstarpClassloader加载器构建和初始化Java中三种类加载和线程上下文类加载器，
+然后在根据不同场景去使用这些类加载器去自己的类查找路径去加载类。
+
+（1）从jvm缓存查找该类，如何该类之前被加载过，
+    则直接从jvm缓存返回该类，否者看当前类加载器是否有父加载器，
+    如果有的话则委托为父类加载器进行加载
+
+（2）否者调用
+
+（3）委托为BootStrapClassloader进行加载，如果还是没有找到，
+    则调用当前Classloader的findclass方法进行查找
+
+
+特殊的类加载器：ContextClassLoader
+
+
+获取当前线程上下文类加载器
+    ClassLoader classLoader = Thread.currentThread().getContextClassLoader();
+    try {//设置当前线程上下文类加载器为targetTccl
+        Thread.currentThread().setContextClassLoader(targetTccl);    //doSomething
+        doSomething(); doSomething里面则调用了 Thread.currentThread().getContextClassLoader()
+    } finally {//设置当前线程上下文加载器为原始加载器
+        Thread.currentThread().setContextClassLoader(classLoader);
+    }
+
+-----------------------------------------------------------
+我们知道Java默认的类加载机制是委托机制，
+但是有时这种加载顺序不能正常工作，
+通常发生在有些JVM核心代码必须动态加载由应用程序开发人员提供的资源时。
+
+当父类加载器需要加载子类加载器中的资源时候可以通过设置和获取线程上下文类加载器来实现，
+其实另外还有一种情况就是一个类加载器要使用不在当前类加载器类查找路径路径中的情况，
+这种情况下可以新建一个在指定路径查找类的类加载器，
+其实下面第五节要讲的pandora类加载机制就是这样。
+------------------------------------------------------------
+
+
+具体来说在比如Java中的spi,SPI的全名为Service Provider Interface,spi是面向接口编程，
+服务规则提供者会在Java核心类理他提供服务访问接口，而具体实现则有其他开发商提供，
+我们知道Java核心类，例如rt.jar包是由bootstrap加载，而用户提供的jar包是由appclassloader加载。
+另外我们知道如果一个类是由A加载器加载，那么A类依赖或者引用的类也是由相同的加载器加载。
+那么由bootstarp加载的类怎么加载到本来应该由appclassloadr加载的类那，这时候线程上下文类加载就派上用处了。
+通过java.util.ServiceLoader
+
+
+
+
+protected Class<?> loadClass(String name,boolean resolve) throws ClassNotFoundException
+   {
+       synchronized (getClassLoadingLock(name)) {
+           // 首先从jvm缓存查找该类
+           Class c = findLoadedClass(name);  (1)           if (c ==null) {
+               longt0 = System.nanoTime();
+               try {  //然后委托给父类加载器进行加载
+                   if (parent !=null) {
+                       c = parent.loadClass(name,false);  (2)
+                   } else {  //如果父类加载器为null,则委托给BootStrap加载器加载
+                       c = findBootstrapClassOrNull(name);  (3)
+                   }
+               } catch (ClassNotFoundExceptione) {
+                   // ClassNotFoundException thrown if class not found
+                   // from the non-null parent class loader
+               }
+
+               if (c ==null) {
+                   // 若仍然没有找到则调用findclass查找
+                   // to find the class.
+                   longt1 = System.nanoTime();
+                   c = findClass(name);  (4)                   // this is the defining class loader; record the stats
+                   sun.misc.PerfCounter.getParentDelegationTime().addTime(t1 -t0);
+                   sun.misc.PerfCounter.getFindClassTime().addElapsedTimeFrom(t1);
+                   sun.misc.PerfCounter.getFindClasses().increment();
+               }
+           }
+           if (resolve) {
+               resolveClass(c);
+           }
+           returnc;
+       }
+   }
